@@ -6,6 +6,19 @@ from utils.datasets import *
 from utils.utils import *
 
 
+def convert(size, box):
+    dw = 1./size[0]
+    dh = 1./size[1]
+    x = (box[0] + box[1])/2.0
+    y = (box[2] + box[3])/2.0
+    w = box[1] - box[0]
+    h = box[3] - box[2]
+    x = x*dw
+    w = w*dw
+    y = y*dh
+    h = h*dh
+    return (x,y,w,h)
+
 def detect(save_txt=False, save_img=False):
     img_size = (320, 192) if ONNX_EXPORT else opt.img_size  # (320, 192) or (416, 256) or (608, 352) for (height, width)
     out, source, weights, half, view_img = opt.output, opt.source, opt.weights, opt.half, opt.view_img
@@ -101,9 +114,11 @@ def detect(save_txt=False, save_img=False):
 
             save_path = str(Path(out) / Path(p).name)
             s += '%gx%g ' % img.shape[2:]  # print string
+            
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                print ("det {}".format(det))
 
                 # Print results
                 for c in det[:, -1].unique():
@@ -118,6 +133,49 @@ def detect(save_txt=False, save_img=False):
 
                     if save_img or view_img:  # Add bbox to image
                         label = '%s %.2f' % (classes[int(cls)], conf)
+                        
+                        
+                        if classes[int(cls)] == "person":
+                            #convert image shape to Darknet format
+                            c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))
+                            print ("label: {}, c1: {}, c2:{}, height: {}, width: {} ".format(classes[int(cls)], c1,c2,im0.shape[0],im0.shape[1]))
+                            
+                            h = im0.shape[0]
+                            w = im0.shape[1]
+                            xmin = int(xyxy[0])
+                            ymin = int(xyxy[1])
+                            xmax = int(xyxy[2])
+                            ymax = int(xyxy[3])
+                            assert xmax > xmin
+                            assert ymax > ymin
+
+                            #o_width = abs(xmax - xmin)
+                            #o_height = abs(ymax - ymin)
+
+                            b = (float(xmin), float(xmax), float(ymin), float(ymax))
+                            bb = convert((w,h), b)
+                            
+                            print ("YOLO: [" + str(0) + " " + " ".join([str(a) for a in bb]) + ']\n')
+                            
+                            out_file = open(save_path + '.txt', 'w')
+                            out_file.write(str(0) + " " + " ".join([str("{0:.6f}".format(a)) for a in bb]) + ']\n')
+                            
+                            bboxWidth = bb[2] * w
+                            bboxHeight = bb[3] * h
+                            centerX = bb[0] * w
+                            centerY = bb[1] * h
+
+                            voc = [None] * 4
+                            voc[0] = centerX - (bboxWidth/2)
+                            voc[1] = centerY - (bboxHeight/2)
+                            voc[2] = centerX + (bboxWidth/2)
+                            voc[3] = centerY + (bboxHeight/2)
+                            
+                            print ("VOC: " + " ".join([str(a) for a in voc]) + '\n')
+                            
+                            
+                            #print ("BB: {}".format(bb))
+                        
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
 
             print('%sDone. (%.3fs)' % (s, time.time() - t))
