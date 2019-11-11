@@ -18,6 +18,20 @@ def convert(size, box):
     y = y*dh
     h = h*dh
     return (x,y,w,h)
+    
+def darknet_to_voc(bb, w, h):
+    bboxWidth = bb[2] * w
+    bboxHeight = bb[3] * h
+    centerX = bb[0] * w
+    centerY = bb[1] * h
+
+    voc = [None] * 4
+    voc[0] = centerX - (bboxWidth/2)
+    voc[1] = centerY - (bboxHeight/2)
+    voc[2] = centerX + (bboxWidth/2)
+    voc[3] = centerY + (bboxHeight/2)
+
+    print ("VOC: " + " ".join([str(a) for a in voc]) + '\n')
 
 def detect(save_txt=False, save_img=False):
     img_size = (320, 192) if ONNX_EXPORT else opt.img_size  # (320, 192) or (416, 256) or (608, 352) for (height, width)
@@ -84,6 +98,14 @@ def detect(save_txt=False, save_img=False):
     classes = load_classes(parse_data_cfg(opt.data)['names'])
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
 
+    import csv
+    row_header = ['image', 'xmin', 'ymin','xmax','ymax','label']
+    with open('Anotations.csv', 'w', newline='') as csvFile:
+        writer = csv.writer(csvFile)
+        writer.writerow(row_header)
+    
+    csvFile.close()
+    
     # Run inference
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
@@ -93,6 +115,7 @@ def detect(save_txt=False, save_img=False):
         img = torch.from_numpy(img).to(device)
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
+            
         pred = model(img)[0]
 
         if opt.half:
@@ -105,20 +128,26 @@ def detect(save_txt=False, save_img=False):
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
 
+       
+        
+        
         # Process detections
         for i, det in enumerate(pred):  # detections per image
+            person_detected = False
+            
             if webcam:  # batch_size >= 1
                 p, s, im0 = path[i], '%g: ' % i, im0s[i]
             else:
                 p, s, im0 = path, '', im0s
 
             save_path = str(Path(out) / Path(p).name)
+            save_path_without_extension = str(Path(out) / Path(p).stem)
+            
             s += '%gx%g ' % img.shape[2:]  # print string
             
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-                print ("det {}".format(det))
 
                 # Print results
                 for c in det[:, -1].unique():
@@ -134,11 +163,10 @@ def detect(save_txt=False, save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         label = '%s %.2f' % (classes[int(cls)], conf)
                         
-                        
-                        if classes[int(cls)] == "person":
+                        if classes[int(cls)] == "person" and conf > 0.7:
+                            person_detected = True
                             #convert image shape to Darknet format
                             c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))
-                            print ("label: {}, c1: {}, c2:{}, height: {}, width: {} ".format(classes[int(cls)], c1,c2,im0.shape[0],im0.shape[1]))
                             
                             h = im0.shape[0]
                             w = im0.shape[1]
@@ -148,7 +176,15 @@ def detect(save_txt=False, save_img=False):
                             ymax = int(xyxy[3])
                             assert xmax > xmin
                             assert ymax > ymin
-
+                            
+                            row = ['{}'.format(Path(p).name), xmin, ymin, xmax,ymax,'person']
+                            
+                            with open('Anotations.csv', 'a', newline='') as csvFile:
+                                writer = csv.writer(csvFile)
+                                writer.writerow(row)
+                                
+                            csvFile.close()
+                            
                             #o_width = abs(xmax - xmin)
                             #o_height = abs(ymax - ymin)
 
@@ -157,26 +193,13 @@ def detect(save_txt=False, save_img=False):
                             
                             print ("YOLO: [" + str(0) + " " + " ".join([str(a) for a in bb]) + ']\n')
                             
-                            out_file = open(save_path + '.txt', 'w')
-                            out_file.write(str(0) + " " + " ".join([str("{0:.6f}".format(a)) for a in bb]) + ']\n')
+                            out_file = open(save_path_without_extension + '.txt', 'a')
+                            out_file.write(str(0) + " " + " ".join([str("{0:.6f}".format(a)) for a in bb]) + '\n')
                             
-                            bboxWidth = bb[2] * w
-                            bboxHeight = bb[3] * h
-                            centerX = bb[0] * w
-                            centerY = bb[1] * h
+                            #darknet_to_voc(bb, w, h)
 
-                            voc = [None] * 4
-                            voc[0] = centerX - (bboxWidth/2)
-                            voc[1] = centerY - (bboxHeight/2)
-                            voc[2] = centerX + (bboxWidth/2)
-                            voc[3] = centerY + (bboxHeight/2)
-                            
-                            print ("VOC: " + " ".join([str(a) for a in voc]) + '\n')
-                            
-                            
-                            #print ("BB: {}".format(bb))
                         
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
+                        #plot_one_box(xyxy, im0, label=label, color=colors[int(cls)])
 
             print('%sDone. (%.3fs)' % (s, time.time() - t))
 
@@ -185,7 +208,7 @@ def detect(save_txt=False, save_img=False):
                 cv2.imshow(p, im0)
 
             # Save results (image with detections)
-            if save_img:
+            if save_img and person_detected:
                 if dataset.mode == 'images':
                     cv2.imwrite(save_path, im0)
                 else:
@@ -199,6 +222,9 @@ def detect(save_txt=False, save_img=False):
                         h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*opt.fourcc), fps, (w, h))
                     vid_writer.write(im0)
+
+        
+        
 
     if save_txt or save_img:
         print('Results saved to %s' % os.getcwd() + os.sep + out)
