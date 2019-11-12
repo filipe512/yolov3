@@ -44,25 +44,29 @@ class LoadImages:  # for inference
     def __init__(self, path, img_size=416, half=False):
         path = str(Path(path))  # os-agnostic
         files = []
+        
         if os.path.isdir(path):
-            files = sorted(glob.glob(os.path.join(path, '*.*')))
+            files = [os.path.join(d, x)
+            for d, dirs, files in os.walk(path)
+            for x in files if x.endswith(".jpg")]
+
         elif os.path.isfile(path):
             files = [path]
 
         images = [x for x in files if os.path.splitext(x)[-1].lower() in img_formats]
-        videos = [x for x in files if os.path.splitext(x)[-1].lower() in vid_formats]
-        nI, nV = len(images), len(videos)
+        #videos = [x for x in files if os.path.splitext(x)[-1].lower() in vid_formats]
+        #nI, nV = len(images), len(videos)
+        nI = len(images)
 
         self.img_size = img_size
-        self.files = images + videos
-        self.nF = nI + nV  # number of files
-        self.video_flag = [False] * nI + [True] * nV
+        self.files = images
+        self.nF = nI  # number of files
+        self.video_flag = [False] * nI 
         self.mode = 'images'
         self.half = half  # half precision fp16 images
-        if any(videos):
-            self.new_video(videos[0])  # new video
-        else:
-            self.cap = None
+       
+        self.cap = None
+        
         assert self.nF > 0, 'No images or videos found in ' + path
 
     def __iter__(self):

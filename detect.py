@@ -109,6 +109,7 @@ def detect(save_txt=False, save_img=False):
     # Run inference
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
+        print (dataset)
         t = time.time()
 
         # Get detections
@@ -129,8 +130,6 @@ def detect(save_txt=False, save_img=False):
             pred = apply_classifier(pred, modelc, img, im0s)
 
        
-        
-        
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             person_detected = False
@@ -141,7 +140,7 @@ def detect(save_txt=False, save_img=False):
                 p, s, im0 = path, '', im0s
 
             save_path = str(Path(out) / Path(p).name)
-            save_path_without_extension = str(Path(out) / Path(p).stem)
+            save_path_without_extension = str(Path(path).parent / Path(path).stem)
             
             s += '%gx%g ' % img.shape[2:]  # print string
             
@@ -163,8 +162,8 @@ def detect(save_txt=False, save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         label = '%s %.2f' % (classes[int(cls)], conf)
                         
-                        if classes[int(cls)] == "person" and conf > 0.7:
-                            person_detected = True
+                        if classes[int(cls)] == "person" and conf > 0.5:
+                            person_detected = False
                             #convert image shape to Darknet format
                             c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))
                             
@@ -193,7 +192,9 @@ def detect(save_txt=False, save_img=False):
                             
                             print ("YOLO: [" + str(0) + " " + " ".join([str(a) for a in bb]) + ']\n')
                             
-                            out_file = open(save_path_without_extension + '.txt', 'a')
+                            output_save = save_path_without_extension + '.txt'
+                            print (output_save)
+                            out_file = open(output_save, 'a')
                             out_file.write(str(0) + " " + " ".join([str("{0:.6f}".format(a)) for a in bb]) + '\n')
                             
                             #darknet_to_voc(bb, w, h)
@@ -248,6 +249,7 @@ if __name__ == '__main__':
     parser.add_argument('--half', action='store_true', help='half precision FP16 inference')
     parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1) or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
+    
     opt = parser.parse_args()
     print(opt)
 
